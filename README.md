@@ -5,3 +5,5 @@ Life game of zig.
 ```
 zig run life_game.zig
 ```
+
+![output](assets/output.gif)

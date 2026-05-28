@@ -279,7 +279,7 @@ const Game = struct {
 pub fn main(init: std.process.Init) !void {
     var output_buf: [1024]u8 = undefined;
     var stdout = STDOUT.writer(init.io, &output_buf);
-    var the_game = Game.init(init.gpa, 8, 1) catch {
+    var the_game = Game.init(init.gpa, 16, 1) catch {
         std.debug.print("Game init error, perhaps the error of new_place.\n", .{});
         std.process.exit(1);
     };
