@@ -25,16 +25,10 @@ const Game = struct {
     refresh_time: usize,
     game: [][]Unit,
 
-    fn new_place(heap: std.mem.Allocator, s: usize) [][]Unit {
-        var game = heap.alloc([]Unit, s) catch {
-            std.debug.print("game alloc get error\n", .{});
-            std.process.exit(1);
-        };
+    fn new_place(heap: std.mem.Allocator, s: usize) ![][]Unit {
+        var game = try heap.alloc([]Unit, s);
         for (0..s) |i| {
-            game[i] = heap.alloc(Unit, s) catch {
-                std.debug.print("game_line alloc get error\n", .{});
-                std.process.exit(1);
-            };
+            game[i] = try heap.alloc(Unit, s);
         }
         return game;
     }
@@ -46,8 +40,8 @@ const Game = struct {
         heap.free(self.game);
     }
 
-    fn init(heap: std.mem.Allocator, s: usize, t: usize) Game {
-        const game = new_place(heap, s);
+    fn init(heap: std.mem.Allocator, s: usize, t: usize) !Game {
+        const game = try new_place(heap, s);
         var self: Game = .{ .size = s, .refresh_time = t, .game = game };
         for (0..self.size) |i| {
             for (0..self.size) |j| {
@@ -206,7 +200,11 @@ const Game = struct {
     }
 
     fn check_lives(self: *Game, heap: std.mem.Allocator) void {
-        var new_game = new_place(heap, self.size);
+        var new_game = new_place(heap, self.size) catch {
+            self.delete_old_place(heap);
+            std.debug.print("new_place error.\n", .{});
+            std.process.exit(1);
+        };
         for (0..self.size) |i| {
             for (0..self.size) |j| {
                 check_live(self.*, self.game[i][j], &new_game);
@@ -218,16 +216,20 @@ const Game = struct {
 
     fn start(self: *Game, drawer: *std.Io.File.Writer, proginit: std.process.Init) void {
         defer drawer.flush() catch {
+            self.delete_old_place(proginit.gpa);
             std.debug.print("Game start error.\n", .{});
+            std.process.exit(1);
         };
         var is_over: bool = false;
         _ = drawer.interface.write("\x1b[s") catch {
-            std.debug.print("terminal reflush error\n", .{});
+            self.delete_old_place(proginit.gpa);
+            std.debug.print("terminal reflush error.\n", .{});
             std.process.exit(1);
         };
         while (!is_over) {
             _ = drawer.interface.write("\x1b[u") catch {
-                std.debug.print("terminal reflush error\n", .{});
+                self.delete_old_place(proginit.gpa);
+                std.debug.print("terminal reflush error.\n", .{});
                 std.process.exit(1);
             };
             is_over = true;
@@ -236,23 +238,32 @@ const Game = struct {
                     if (unit.is_live == true) {
                         is_over = false;
                         _ = drawer.interface.write("# ") catch {
-                            std.debug.print("print # error\n", .{});
+                            self.delete_old_place(proginit.gpa);
+                            std.debug.print("print # error.\n", .{});
+                            std.process.exit(1);
                         };
                     } else {
                         _ = drawer.interface.write("* ") catch {
-                            std.debug.print("print * error\n", .{});
+                            self.delete_old_place(proginit.gpa);
+                            std.debug.print("print * error.\n", .{});
+                            std.process.exit(1);
                         };
                     }
                 }
                 _ = drawer.interface.write("\n") catch {
-                    std.debug.print("print \\n error\n", .{});
+                    self.delete_old_place(proginit.gpa);
+                    std.debug.print("print \\n error.\n", .{});
+                    std.process.exit(1);
                 };
             }
             drawer.flush() catch {
+                self.delete_old_place(proginit.gpa);
                 std.debug.print("flush error.\n", .{});
+                std.process.exit(1);
             };
             proginit.io.sleep(.fromSeconds(1), .real) catch {
-                std.debug.print("sleep error\n", .{});
+                self.delete_old_place(proginit.gpa);
+                std.debug.print("sleep error.\n", .{});
                 std.process.exit(1);
             };
             self.check_lives(proginit.gpa);
@@ -268,7 +279,10 @@ const Game = struct {
 pub fn main(init: std.process.Init) !void {
     var output_buf: [1024]u8 = undefined;
     var stdout = STDOUT.writer(init.io, &output_buf);
-    var the_game = Game.init(init.gpa, 8, 1);
+    var the_game = Game.init(init.gpa, 8, 1) catch {
+        std.debug.print("Game init error, perhaps the error of new_place.\n", .{});
+        std.process.exit(1);
+    };
     defer the_game.over(init.gpa);
     the_game.start(&stdout, init);
 }
