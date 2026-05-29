@@ -11,7 +11,7 @@ const Unit = struct {
         return .{ .is_live = false, .pos = position };
     }
 
-    fn relive(position: [2]usize) Unit {
+    fn live(position: [2]usize) Unit {
         return .{ .is_live = true, .pos = position };
     }
 
@@ -186,13 +186,13 @@ const Game = struct {
         }
         if (unit.is_live) {
             if (count == 2 or count == 3) {
-                new_game.*[x][y] = Unit.create(.{ x, y }, true);
+                new_game.*[x][y] = Unit.live(.{ x, y });
             } else {
                 new_game.*[x][y] = Unit.die(.{ x, y });
             }
         } else {
             if (count == 3) {
-                new_game.*[x][y] = Unit.relive(.{ x, y });
+                new_game.*[x][y] = Unit.live(.{ x, y });
             } else {
                 new_game.*[x][y] = Unit.die(.{ x, y });
             }
@@ -215,20 +215,14 @@ const Game = struct {
     }
 
     fn start(self: *Game, drawer: *std.Io.File.Writer, proginit: std.process.Init) void {
-        defer drawer.flush() catch {
-            self.delete_old_place(proginit.gpa);
-            std.debug.print("Game start error.\n", .{});
-            std.process.exit(1);
-        };
+        errdefer self.delete_old_place(proginit.gpa);
         var is_over: bool = false;
         _ = drawer.interface.write("\x1b[s") catch {
-            self.delete_old_place(proginit.gpa);
             std.debug.print("terminal reflush error.\n", .{});
             std.process.exit(1);
         };
         while (!is_over) {
             _ = drawer.interface.write("\x1b[u") catch {
-                self.delete_old_place(proginit.gpa);
                 std.debug.print("terminal reflush error.\n", .{});
                 std.process.exit(1);
             };
@@ -238,36 +232,35 @@ const Game = struct {
                     if (unit.is_live == true) {
                         is_over = false;
                         _ = drawer.interface.write("# ") catch {
-                            self.delete_old_place(proginit.gpa);
                             std.debug.print("print # error.\n", .{});
                             std.process.exit(1);
                         };
                     } else {
                         _ = drawer.interface.write("* ") catch {
-                            self.delete_old_place(proginit.gpa);
                             std.debug.print("print * error.\n", .{});
                             std.process.exit(1);
                         };
                     }
                 }
                 _ = drawer.interface.write("\n") catch {
-                    self.delete_old_place(proginit.gpa);
                     std.debug.print("print \\n error.\n", .{});
                     std.process.exit(1);
                 };
             }
             drawer.flush() catch {
-                self.delete_old_place(proginit.gpa);
                 std.debug.print("flush error.\n", .{});
                 std.process.exit(1);
             };
             proginit.io.sleep(.fromSeconds(1), .real) catch {
-                self.delete_old_place(proginit.gpa);
                 std.debug.print("sleep error.\n", .{});
                 std.process.exit(1);
             };
             self.check_lives(proginit.gpa);
         }
+        defer drawer.flush() catch {
+            std.debug.print("flush error.\n", .{});
+            std.process.exit(1);
+        };
     }
 
     fn over(self: Game, heap: std.mem.Allocator) void {
